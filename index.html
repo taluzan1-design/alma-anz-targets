@@ -391,7 +391,11 @@ tfoot td.act-col{background:rgba(26,107,80,0.15);color:#1a5038}
     </div>
     <div class="login-body">
       <div class="login-label">Your Name</div>
-      <input class="login-input" id="loginInput" type="text" placeholder="Enter your name..." autocomplete="name">
+      <input class="login-input" id="loginInput" type="text" placeholder="Enter your name..." autocomplete="name" oninput="checkAdminPin()">
+      <div id="pinField" style="display:none;margin-top:12px">
+        <div class="login-label">Admin PIN</div>
+        <input class="login-input" id="loginPin" type="password" placeholder="Enter your PIN..." maxlength="10">
+      </div>
       <button class="login-btn" onclick="submitLogin()">Continue</button>
       <div style="text-align:center;margin-top:10px;font-size:9px;font-weight:600;color:rgba(68,44,92,0.3);letter-spacing:0.5px">Your device will be remembered for 90 days</div>
     </div>
@@ -578,6 +582,7 @@ const FIREBASE_CONFIG = {
 
 
 const ADMIN_NAMES = ['Tal']; // Add names here who get admin/GM access
+const ADMIN_PINS = {'Tal': '2626'}; // PIN required for admin login — change this!
 // ═══════════════════════════════════════════════════════════════
 
 const QS=['Q1','Q2','Q3','Q4'];
@@ -739,9 +744,11 @@ function checkAccess(){
   }
 
   // ── No cache: check Firebase ─────────────────────────────
+  // Check if we have a saved name from a previous visit
+  const savedName = getSavedUser();
+
   if(!db){
-    const name=localStorage.getItem('alma_user_v1')||'';
-    if(name){currentUser=name;isAdmin=ADMIN_NAMES.includes(name);setCachedAuth(name,isAdmin);bootApp();}
+    if(savedName){currentUser=savedName;isAdmin=ADMIN_NAMES.includes(savedName);setCachedAuth(savedName,isAdmin);bootApp();}
     else showNameScreen();
     return;
   }
@@ -751,7 +758,20 @@ function checkAccess(){
     if(u){
       currentUser=u.name;isAdmin=ADMIN_NAMES.includes(u.name);
       setCachedAuth(u.name,isAdmin);
+      saveUserWithExpiry(u.name); // Refresh 90-day memory
       bootApp();
+    } else if(savedName){
+      // Name saved but not yet approved — check if pending
+      db.ref('alma/auth/pending/'+deviceId).once('value').then(snap2=>{
+        if(snap2.val()){
+          showWaitingScreen(savedName);listenForApproval();
+        } else {
+          // Re-submit pending request automatically
+          db.ref('alma/auth/pending/'+deviceId).set({name:savedName,requestedAt:new Date().toISOString(),deviceId})
+            .then(()=>{showWaitingScreen(savedName);listenForApproval();})
+            .catch(()=>showNameScreen());
+        }
+      });
     } else {
       db.ref('alma/auth/pending/'+deviceId).once('value').then(snap2=>{
         const p=snap2.val();
@@ -760,17 +780,34 @@ function checkAccess(){
       });
     }
   }).catch(()=>{
-    const name=localStorage.getItem('alma_user_v1')||'';
-    if(name){currentUser=name;isAdmin=ADMIN_NAMES.includes(name);setCachedAuth(name,isAdmin);bootApp();}
+    if(savedName){currentUser=savedName;isAdmin=ADMIN_NAMES.includes(savedName);setCachedAuth(savedName,isAdmin);bootApp();}
     else showNameScreen();
   });
 }
 
+
+function checkAdminPin(){
+  const name=(document.getElementById('loginInput').value||'').trim();
+  const pinField=document.getElementById('pinField');
+  if(pinField)pinField.style.display=ADMIN_NAMES.includes(name)?'block':'none';
+}
 function submitLogin(){
   const inp=document.getElementById('loginInput');
   const name=inp?inp.value.trim():'';
   if(!name){inp&&inp.focus();return;}
   const isAdminUser = ADMIN_NAMES.includes(name);
+  // Save name immediately so returning users skip this screen
+  saveUserWithExpiry(name);
+  // Verify PIN for admin users
+  if(isAdminUser){
+    const pinInput=document.getElementById('loginPin');
+    const enteredPin=pinInput?pinInput.value.trim():'';
+    const correctPin=ADMIN_PINS[name]||'';
+    if(correctPin&&enteredPin!==correctPin){
+      if(pinInput)pinInput.style.borderColor='#e53935';
+      showToast('Incorrect PIN','warn');return;
+    }
+  }
   if(!db){
     currentUser=name;isAdmin=isAdminUser;
     saveUserWithExpiry(name);
