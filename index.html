@@ -1060,26 +1060,32 @@ function updateBalanceDisplay(){
 }
 
 function updateTerrChart(){
-  const yr=curYear();const body=document.getElementById('terrChartBody');const sub=document.getElementById('terrChartSub');if(!body)return;
-  const terrMap={};yr.reps.forEach(rep=>{const t=rep.territory||'Other';if(!terrMap[t])terrMap[t]={total:0,cap:0,ace:0};const rv=rTotal(rep);terrMap[t].total+=rv;if(rep.team==='Capital')terrMap[t].cap+=rv;else if(rep.team==='Consumables/Ace')terrMap[t].ace+=rv;else terrMap[t].corp=(terrMap[t].corp||0)+rv;});
+  const yr=curYear();
+  const body=document.getElementById('terrChartBody');
+  const actualsBody=document.getElementById('terrActualsBody');
+  const sub=document.getElementById('terrChartSub');
+  if(!body)return;
+
+  // Build target map
+  const terrMap={};
+  yr.reps.forEach(rep=>{
+    const t=rep.territory||'Other';
+    if(!terrMap[t])terrMap[t]={total:0,cap:0,ace:0,corp:0};
+    const rv=rTotal(rep);
+    terrMap[t].total+=rv;
+    if(rep.team==='Capital')terrMap[t].cap+=rv;
+    else if(rep.team==='Consumables/Ace')terrMap[t].ace+=rv;
+    else terrMap[t].corp=(terrMap[t].corp||0)+rv;
+  });
+
   const entries=Object.entries(terrMap).filter(([k,v])=>v.total>0).sort((a,b)=>b[1].total-a[1].total);
   if(entries.length===0){body.innerHTML='<div class="terr-no-data">No territory data yet.</div>';return;}
-  const maxVal=Math.max(...entries.map(([k,v])=>v.total));const total=entries.reduce((s,[k,v])=>s+v.total,0);
+
+  const targetMax=Math.max(...entries.map(([k,v])=>v.total));
+  const total=entries.reduce((s,[k,v])=>s+v.total,0);
   if(sub)sub.textContent=entries.length+' territories · Target: '+fmtF(total);
-  const MAX_H=160;let html='<div class="terr-bars-wrap">';
-  entries.forEach(([terr,v])=>{const barH=maxVal>0?Math.round((v.total/maxVal)*MAX_H):0;const capH=v.total>0?Math.round((v.cap/v.total)*barH):0;const aceH=barH-capH;html+=`<div class="terr-col"><div class="terr-col-val">${fmt(v.total)}</div><div class="terr-col-bar" style="height:${barH}px">${(v.corp||0)>0?`<div style="height:${Math.round(((v.corp||0)/v.total)*barH)}px;background:var(--corp-color)"></div>`:''}${v.ace>0?`<div style="height:${aceH}px;background:var(--peach-mid)"></div>`:''}${v.cap>0?`<div style="height:${capH}px;background:var(--cap-color)"></div>`:''}</div><div class="terr-col-label">${terr}</div></div>`;});
-  html+='</div>';body.innerHTML=html;
 
-  // ── Actuals chart ──────────────────────────────────────────
-  const actualsBody=document.getElementById('terrActualsBody');
-  if(!actualsBody)return;
-
-  if(!anyActualsLoaded()){
-    actualsBody.innerHTML='<div class="terr-no-data" style="color:rgba(68,44,92,0.25);font-size:10px">Import actual sales to see comparison</div>';
-    return;
-  }
-
-  // Build actuals by territory
+  // Build actuals map
   const aTerrMap={};
   yr.reps.forEach(rep=>{
     const t=rep.territory||'Other';
@@ -1093,26 +1099,56 @@ function updateTerrChart(){
     else aTerrMap[t].corp+=rv;
   });
 
-  // Sort same as target chart (by target value) for alignment
-  const aEntries=entries.map(([terr])=>([terr,aTerrMap[terr]||{total:0,cap:0,ace:0,corp:0}]));
-  // Use same globalMax as target chart for aligned scale
-  let aHtml='<div class="terr-bars-wrap">';
-  aEntries.forEach(([terr,v])=>{
+  const actualsMax=Math.max(...Object.values(aTerrMap).map(v=>v.total),0);
+  // Shared scale so both charts align visually
+  const MAX_H=160;
+  const sharedMax=Math.max(targetMax,actualsMax,1);
+
+  // ── Target chart ──
+  let html='<div class="terr-bars-wrap">';
+  entries.forEach(([terr,v])=>{
     const barH=Math.round((v.total/sharedMax)*MAX_H);
-    const tgt=terrMap[terr]?terrMap[terr].total:0;
-    const pct=tgt>0?Math.round((v.total/tgt)*100):0;
-    const cls=pct>=100?'#27ae60':pct>=51?'#f1c40f':'#e74c3c';
     const capH=v.total>0?Math.round((v.cap/v.total)*barH):0;
     const aceH=v.total>0?Math.round((v.ace/v.total)*barH):0;
     const corpH=barH-capH-aceH;
+    html+=`<div class="terr-col">
+      <div class="terr-col-val">${fmt(v.total)}</div>
+      <div class="terr-col-bar" style="height:${barH}px">
+        ${(v.corp||0)>0?`<div style="height:${corpH}px;background:var(--corp-color)"></div>`:''}
+        ${v.ace>0?`<div style="height:${aceH}px;background:var(--peach-mid)"></div>`:''}
+        ${v.cap>0?`<div style="height:${capH}px;background:var(--cap-color)"></div>`:''}
+      </div>
+      <div class="terr-col-label">${terr}</div>
+    </div>`;
+  });
+  html+='</div>';
+  body.innerHTML=html;
+
+  // ── Actuals chart ──
+  if(!actualsBody)return;
+  if(!anyActualsLoaded()){
+    actualsBody.innerHTML='<div class="terr-no-data" style="color:rgba(68,44,92,0.25);font-size:10px">Import actual sales to see comparison</div>';
+    return;
+  }
+
+  let aHtml='<div class="terr-bars-wrap">';
+  entries.forEach(([terr])=>{
+    const v=aTerrMap[terr]||{total:0,cap:0,ace:0,corp:0};
+    const tgt=terrMap[terr]?terrMap[terr].total:0;
+    const pct=tgt>0?Math.round((v.total/tgt)*100):0;
+    const barH=Math.round((v.total/sharedMax)*MAX_H);
+    const capH=v.total>0?Math.round((v.cap/v.total)*barH):0;
+    const aceH=v.total>0?Math.round((v.ace/v.total)*barH):0;
+    const corpH=barH-capH-aceH;
+    const col=pct>=100?'#27ae60':pct>=51?'#f1c40f':'#e74c3c';
     aHtml+=`<div class="terr-col">
-      <div class="terr-col-val" style="color:${cls}">${v.total>0?fmt(v.total):'—'}</div>
+      <div class="terr-col-val" style="color:${col}">${v.total>0?fmt(v.total):'—'}</div>
       <div class="terr-col-bar" style="height:${Math.max(barH,v.total>0?4:0)}px">
         ${v.corp>0?`<div style="height:${corpH}px;background:var(--corp-color)"></div>`:''}
         ${v.ace>0?`<div style="height:${aceH}px;background:var(--peach-mid)"></div>`:''}
         ${v.cap>0?`<div style="height:${capH}px;background:var(--cap-color)"></div>`:''}
       </div>
-      <div class="terr-col-label">${terr}${pct>0?`<br><span style="font-size:8px;font-weight:800;color:${cls}">${pct}%</span>`:''}</div>
+      <div class="terr-col-label">${terr}${pct>0?`<br><span style="font-size:8px;font-weight:800;color:${col}">${pct}%</span>`:''}</div>
     </div>`;
   });
   aHtml+='</div>';
