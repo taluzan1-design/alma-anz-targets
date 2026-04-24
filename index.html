@@ -1074,8 +1074,8 @@ function updateTerrChart(){
   const actualsBody=document.getElementById('terrActualsBody');
   if(!actualsBody)return;
 
-  if(!anyActualsLoaded()||!showActuals){
-    actualsBody.innerHTML='<div class="terr-no-data" style="color:rgba(68,44,92,0.25);font-size:10px">'+(anyActualsLoaded()&&!showActuals?'Tap "Show Actual Sales" to view':'Import actual sales to see comparison')+'</div>';
+  if(!anyActualsLoaded()){
+    actualsBody.innerHTML='<div class="terr-no-data" style="color:rgba(68,44,92,0.25);font-size:10px">Import actual sales to see comparison</div>';
     return;
   }
 
