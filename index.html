@@ -1278,7 +1278,7 @@ function render(){
       const bannerText=document.getElementById('actualsBannerText');
       const src=actualsSource||'Imported';
       const repsWithData=Object.keys(actualsData).length;
-      if(bannerText)bannerText.textContent='&#9679; '+src+' actuals loaded for '+repsWithData+' reps.'+(showActuals?' Bars visible.':' Tap "Show Actual Sales" to view bars.');
+      if(bannerText)bannerText.innerHTML=src+' actuals loaded for '+repsWithData+' reps.'+(showActuals?' Bars visible.':' Import actual sales to see comparison bars.');
     }
   } else {
     if(toggleBtn)toggleBtn.style.display='none';
