@@ -844,7 +844,30 @@ function resetRequest(){
 
 function bootApp(){
   loadLogLocal();
-  loadActuals();
+  loadActuals(); // Load from localStorage first (instant)
+  if(db){
+    // Then fetch from Firebase and override (cross-device sync)
+    db.ref('alma/actuals/'+state.currentYear).once('value').then(snap=>{
+      const d=snap.val();
+      if(d&&d.data){
+        actualsData=d.data;
+        actualsSource=d.source||'';
+        try{localStorage.setItem(ACTUALS_KEY,JSON.stringify(d));}catch(e){}
+        renderActualsPanel(d.log||[],d.imported||'');
+        render();
+      }
+    }).catch(()=>{});
+    // Also listen for changes (if another device uploads)
+    db.ref('alma/actuals/'+state.currentYear).on('value',snap=>{
+      const d=snap.val();
+      if(d&&d.data){
+        actualsData=d.data;actualsSource=d.source||'';
+        try{localStorage.setItem(ACTUALS_KEY,JSON.stringify(d));}catch(e){}
+        renderActualsPanel(d.log||[],d.imported||'');
+        updateTerrChart();
+      }
+    });
+  }
   if(db){fbLoadData(ok=>{if(!ok)loadLocal();fbListenData();render();});}
   else{loadLocal();render();}
   if(isAdmin){
@@ -1010,7 +1033,19 @@ function toggleBalanceCheck(){
 }
 
 function addYear(){showModal({title:'Add Financial Year',sub:'Create a new year dataset',fields:[{key:'year',label:'Year',type:'text',placeholder:'e.g. 2027',required:true}],confirmLabel:'Create Year',onConfirm:({year})=>{const yr=parseInt(year);if(isNaN(yr)){showToast('Please enter a valid year','warn');return;}if(state.years[yr]){state.currentYear=yr;renderYearSel();render();return;}state.years[yr]={reps:[],approved:{Q1:false,Q2:false,Q3:false,Q4:false},annualCorpTarget:16000000,qCorpTargets:{Q1:0,Q2:0,Q3:0,Q4:0}};state.currentYear=yr;save('Created FY'+yr);renderYearSel();render();}});}
-function switchYear(y){state.currentYear=parseInt(y);save('Switched to FY'+y);render();}
+function switchYear(y){
+  state.currentYear=parseInt(y);save('Switched to FY'+y);
+  // Reload actuals for new year from Firebase
+  actualsData={};actualsSource='';
+  loadActuals();
+  if(db){
+    db.ref('alma/actuals/'+state.currentYear).once('value').then(snap=>{
+      const d=snap.val();
+      if(d&&d.data){actualsData=d.data;actualsSource=d.source||'';}
+      render();
+    }).catch(()=>render());
+  } else {render();}
+}
 function editAnnualCorp(){const cur=curYear().annualCorpTarget;showModal({title:'Annual Corporate Target',sub:'FY '+state.currentYear,fields:[{key:'target',label:'Target Amount ($)',type:'text',placeholder:'e.g. 16000000',value:cur?Math.round(cur).toString():'',required:true}],confirmLabel:'Update Target',onConfirm:({target})=>{const n=parseFloat(target.replace(/[^0-9.]/g,''));if(isNaN(n)||n<=0){showToast('Please enter a valid amount','warn');return;}const old=curYear().annualCorpTarget;curYear().annualCorpTarget=n;save('Changed FY'+state.currentYear+' annual corp target from '+fmt(old)+' to '+fmt(n));render();}});}
 function editQCorpTarget(q){const yr=curYear();if(!yr.qCorpTargets)yr.qCorpTargets={Q1:0,Q2:0,Q3:0,Q4:0};const cur=yr.qCorpTargets[q]||0;showModal({title:q+' Corporate Target',sub:'FY '+state.currentYear,fields:[{key:'target',label:'Target Amount ($)',type:'text',placeholder:'e.g. 4000000',value:cur?Math.round(cur).toString():'',required:true}],confirmLabel:'Update '+q+' Target',onConfirm:({target})=>{const n=parseFloat(target.replace(/[^0-9.]/g,''));if(isNaN(n)||n<0){showToast('Please enter a valid amount','warn');return;}const old=cur;yr.qCorpTargets[q]=n;save('Changed FY'+state.currentYear+' '+q+' corp target from '+fmt(old)+' to '+fmt(n));render();}});}
 function addRep(){showModal({title:'Add New Representative',sub:'Enter the rep details below',fields:[{key:'name',label:'Full Name',type:'text',placeholder:'e.g. Sarah Johnson',required:true},{key:'team',label:'Team',type:'select',options:TEAMS.map(t=>({value:t,label:t}))},{key:'territory',label:'Territory',type:'select',options:TERRITORIES.map(t=>({value:t,label:t||'— No territory —'}))}],confirmLabel:'Add Representative',onConfirm:({name,team,territory})=>{curYear().reps.push({id:state.nextId++,name:name.trim(),team,territory:territory||'',Q1:0,Q2:0,Q3:0,Q4:0});save('Added rep: '+name.trim()+' ('+team+', '+(territory||'no territory')+')');render();}});}
@@ -1323,6 +1358,9 @@ function render(){
   const ls=state.lastSaved?'Saved '+new Date(state.lastSaved).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'Ready';
   document.getElementById('saveStatus').textContent=ls;
   document.getElementById('lastMod').textContent=state.currentYear+' · '+allReps.length+' reps';
+  // Show upload button only to admins
+  const uploadBtnEl=document.querySelector('button[onclick*="sfFileInput"]');
+  if(uploadBtnEl)uploadBtnEl.style.display=ADMIN_NAMES.includes(currentUser)?'flex':'none';
   updateTerrChart();
   if(Object.keys(actualsData).length>0){const stored=JSON.parse(localStorage.getItem(ACTUALS_KEY)||"{}");renderActualsPanel(stored.log||[],stored.imported||"");}
 }
@@ -1374,6 +1412,10 @@ function quarterFromDate(dateStr){
 }
 
 function importSalesforceCSV(event){
+  if(!ADMIN_NAMES.includes(currentUser)){
+    showToast('Only the GM can upload actual sales','warn');
+    event.target.value='';return;
+  }
   const file=event.target.files[0];
   if(!file)return;
   event.target.value='';
