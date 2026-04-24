@@ -845,22 +845,11 @@ function resetRequest(){
 function bootApp(){
   loadLogLocal();
   if(db){
-    // Load state from Firebase first, then render once everything is ready
     fbLoadData(ok=>{
       if(!ok)loadLocal();
-      // Load actuals for current year from Firebase
-      db.ref('alma/actuals/'+state.currentYear).once('value').then(snap=>{
-        const d=snap.val();
-        if(d&&d.data){
-          actualsData=d.data;actualsSource=d.source||'';
-          try{localStorage.setItem(ACTUALS_KEY,JSON.stringify(d));}catch(e){}
-        } else {
-          loadActuals(); // fallback to localStorage
-        }
-        render(); // Single render after everything is loaded
-        fbListenData();
-        listenActualsFromFirebase();
-      }).catch(()=>{loadActuals();render();fbListenData();});
+      render(); // First render with target data
+      fbListenData(); // Listen for target data changes
+      listenActualsFromFirebase(); // Listen for actuals — fires immediately + on change
     });
   } else {
     loadLocal();
@@ -1036,14 +1025,7 @@ function switchYear(y){
   state.currentYear=parseInt(y);save('Switched to FY'+y);
   actualsData={};actualsSource='';
   if(db){
-    db.ref('alma/actuals/'+state.currentYear).once('value').then(snap=>{
-      const d=snap.val();
-      if(d&&d.data){
-        actualsData=d.data;actualsSource=d.source||'';
-        try{localStorage.setItem(ACTUALS_KEY,JSON.stringify(d));}catch(e){}
-      }
-      render();
-    }).catch(()=>render());
+    listenActualsFromFirebase(); // Re-attach listener for new year (fires immediately)
   } else {
     loadActuals();render();
   }
@@ -1876,14 +1858,19 @@ function toggleActualsDisplay(){
 
 function listenActualsFromFirebase(){
   if(!db)return;
+  // Detach any existing listener first to avoid duplicates
+  db.ref('alma/actuals/'+state.currentYear).off();
   db.ref('alma/actuals/'+state.currentYear).on('value',snap=>{
     const d=snap.val();
     if(d&&d.data){
       actualsData=d.data;actualsSource=d.source||'';
       try{localStorage.setItem(ACTUALS_KEY,JSON.stringify(d));}catch(e){}
-      renderActualsPanel(d.log||[],d.imported||'');
-      render(); // Full re-render so table bars + chart both update
+    } else {
+      // Firebase has no actuals for this year — clear local too
+      actualsData={};actualsSource='';
+      localStorage.removeItem(ACTUALS_KEY);
     }
+    render(); // Always re-render whether data appeared or was cleared
   });
 }
 
