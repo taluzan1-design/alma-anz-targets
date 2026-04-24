@@ -1617,11 +1617,18 @@ function finishImport(newActuals,unmatchedSales,log,matched,skipped,wrongYear,so
   const importedTime=new Date().toLocaleString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   const summary='Imported from '+source+': '+matched+' matched reps.'+(skipped?' '+skipped+' skipped.':'')+(wrongYear?' '+wrongYear+' wrong year.':'');
   log.unshift(summary);
-  try{localStorage.setItem(ACTUALS_KEY,JSON.stringify({data:newActuals,source,log,imported:importedTime}));}catch(ex){}
-  if(db)fbLogAction('Imported '+source+' actuals: '+summary);
-  renderActualsPanel(log,importedTime);
-  render();
-  showToast('Imported from '+source+': '+matched+' reps matched','ok');
+  const actualsPayload={data:newActuals,source,log,imported:importedTime,uploadedBy:currentUser,uploadedAt:new Date().toISOString()};
+  try{localStorage.setItem(ACTUALS_KEY,JSON.stringify(actualsPayload));}catch(ex){}
+  if(db){
+    db.ref('alma/actuals/'+state.currentYear).set(actualsPayload)
+      .then(()=>{renderActualsPanel(log,importedTime);render();showToast('Imported & synced to all devices','ok');})
+      .catch(()=>{renderActualsPanel(log,importedTime);render();showToast('Imported locally (sync failed)','warn');});
+    fbLogAction('Uploaded '+source+' actuals: '+summary);
+  } else {
+    renderActualsPanel(log,importedTime);
+    render();
+    showToast('Imported from '+source+': '+matched+' reps matched','ok');
+  }
 }
 
 function parseCsvToRows(text){
