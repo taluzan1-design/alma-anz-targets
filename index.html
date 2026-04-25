@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Alma Targets">
@@ -372,6 +372,23 @@ tfoot td.act-col{background:rgba(26,107,80,0.15);color:#1a5038}
 .toggle-actuals-btn{background:white;color:rgba(68,44,92,0.6);border:1.5px solid rgba(68,44,92,0.2);border-radius:8px;padding:7px 12px;font-family:var(--font);font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all 0.15s}
 .toggle-actuals-btn.active{background:#ede8f5;color:var(--purple);border-color:var(--purple)}
 .toggle-actuals-btn:active{transform:scale(0.97)}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .header{padding:10px 16px 14px}
+  .h-title{font-size:16px}
+  .corp-banner{padding:8px 16px}
+  .main{padding:10px 12px 30px}
+  .q-grid{grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  .top-stats{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+  .login-card{display:flex;flex-direction:row;max-width:95vw;width:500px}
+  .login-head{width:160px;flex-shrink:0;padding:20px 16px}
+  .login-logo{height:28px;margin-bottom:10px}
+  .login-welcome{font-size:14px}
+  .login-body{flex:1;padding:16px}
+  .login-footer{display:none}
+  .terr-chart-card{margin-top:10px}
+  .balance-wrap{margin-bottom:10px}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
