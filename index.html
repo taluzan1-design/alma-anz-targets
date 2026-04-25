@@ -406,18 +406,31 @@ tfoot td.act-col{background:rgba(26,107,80,0.15);color:#1a5038}
       <div class="login-sub">ALMA LASERS AUSTRALIA</div>
       <div style="position:relative;z-index:1;font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;margin-top:6px;letter-spacing:0.5px">Your name will be remembered for 90 days</div>
     </div>
-    <div class="login-body">
-      <div class="login-label">Your Name</div>
-      <input class="login-input" id="loginInput" type="text" placeholder="Enter your name..." autocomplete="name" oninput="checkAdminPin()">
-      <div id="pinField" style="display:none;margin-top:12px">
-        <div class="login-label">Admin PIN</div>
-        <input class="login-input" id="loginPin" type="password" placeholder="Enter your PIN..." maxlength="10">
-      </div>
-      <button class="login-btn" onclick="submitLogin()">Continue</button>
-      <div id="biometricLoginWrap" style="display:none;margin-top:10px">
-        <button onclick="biometricLoginFromScreen()" style="width:100%;padding:10px;background:rgba(68,44,92,0.06);border:1.5px solid rgba(68,44,92,0.15);border-radius:10px;font-family:var(--font);font-size:11px;font-weight:700;color:var(--purple);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-          <span style="font-size:18px">&#128400;</span> Use Fingerprint / Face ID
+    <div class="login-body" id="loginBody">
+      <!-- Biometric welcome screen (shown if name+cred saved) -->
+      <div id="biometricWelcome" style="display:none;text-align:center">
+        <div id="biometricAvatar" style="width:56px;height:56px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;font-weight:900;color:white"></div>
+        <div id="biometricWelcomeName" style="font-size:16px;font-weight:800;color:var(--purple);margin-bottom:4px"></div>
+        <div style="font-size:10px;color:rgba(68,44,92,0.4);font-weight:600;margin-bottom:20px">Welcome back</div>
+        <button onclick="biometricLoginFromScreen()" style="width:100%;padding:14px;background:var(--purple);border:none;border-radius:12px;font-family:var(--font);font-size:13px;font-weight:800;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px">
+          <span style="font-size:22px">&#128400;</span> Use Fingerprint / Face ID
         </button>
+        <button onclick="showNameInput()" style="width:100%;padding:10px;background:transparent;border:1.5px solid rgba(68,44,92,0.15);border-radius:12px;font-family:var(--font);font-size:11px;font-weight:700;color:rgba(68,44,92,0.5);cursor:pointer">Not you? Enter a different name</button>
+      </div>
+      <!-- Normal name input screen -->
+      <div id="nameInputScreen">
+        <div class="login-label">Your Name</div>
+        <input class="login-input" id="loginInput" type="text" placeholder="Enter your name..." autocomplete="name" oninput="checkAdminPin()">
+        <div id="pinField" style="display:none;margin-top:12px">
+          <div class="login-label">Admin PIN</div>
+          <input class="login-input" id="loginPin" type="password" placeholder="Enter your PIN..." maxlength="10">
+        </div>
+        <button class="login-btn" onclick="submitLogin()">Continue</button>
+        <div id="biometricLoginWrap" style="display:none;margin-top:10px">
+          <button onclick="biometricLoginFromScreen()" style="width:100%;padding:10px;background:rgba(68,44,92,0.06);border:1.5px solid rgba(68,44,92,0.15);border-radius:10px;font-family:var(--font);font-size:11px;font-weight:700;color:var(--purple);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+            <span style="font-size:18px">&#128400;</span> Use Fingerprint / Face ID
+          </button>
+        </div>
       </div>
       <div style="text-align:center;margin-top:10px;font-size:9px;font-weight:600;color:rgba(68,44,92,0.3);letter-spacing:0.5px">Your device will be remembered for 90 days</div>
     </div>
@@ -808,6 +821,31 @@ function checkAccess(){
 }
 
 
+
+function showNameInput(){
+  document.getElementById('biometricWelcome').style.display='none';
+  document.getElementById('nameInputScreen').style.display='block';
+  setTimeout(()=>{const i=document.getElementById('loginInput');if(i)i.focus();},100);
+}
+
+async function initLoginScreen(){
+  const savedName = getSavedUser();
+  if(!savedName) return;
+  const hasCred = getBiometricCred(savedName);
+  if(hasCred){
+    // Show biometric welcome screen
+    document.getElementById('biometricWelcome').style.display='block';
+    document.getElementById('nameInputScreen').style.display='none';
+    const avatar = document.getElementById('biometricAvatar');
+    const welcomeName = document.getElementById('biometricWelcomeName');
+    if(avatar) avatar.textContent = savedName.charAt(0).toUpperCase();
+    if(welcomeName) welcomeName.textContent = savedName;
+    // Pre-fill hidden input so biometricLoginFromScreen works
+    const inp = document.getElementById('loginInput');
+    if(inp) inp.value = savedName;
+  }
+}
+
 async function biometricLoginFromScreen(){
   const inp = document.getElementById('loginInput');
   const name = inp ? inp.value.trim() : '';
@@ -879,7 +917,14 @@ function submitLogin(){
 function showNameScreen(){
   document.getElementById('loginOverlay').classList.remove('hidden');
   document.getElementById('waitingOverlay').classList.add('hidden');
+  // Reset to name input (in case biometric welcome was showing)
+  const biometricWelcome = document.getElementById('biometricWelcome');
+  const nameInputScreen = document.getElementById('nameInputScreen');
+  if(biometricWelcome) biometricWelcome.style.display='none';
+  if(nameInputScreen) nameInputScreen.style.display='block';
   setTimeout(()=>{const i=document.getElementById('loginInput');if(i)i.focus();},100);
+  // Check if we should show biometric welcome instead
+  initLoginScreen();
 }
 
 function showWaitingScreen(name){
@@ -2211,6 +2256,7 @@ function sendNotification(title, body){
 // ── BOOT ─────────────────────────────────────────────────────
 window.addEventListener('load',()=>{
   const fbReady=initFirebase();
+  initLoginScreen();
   checkAccess();
   if('serviceWorker' in navigator) setupNotifications();
 });
