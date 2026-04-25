@@ -1452,7 +1452,7 @@ function saveBiometricCred(name, credId){
 
 async function registerBiometric(name){
   try{
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const challenge = window.crypto.getRandomValues(new Uint8Array(32));
     const credential = await navigator.credentials.create({publicKey:{
       challenge,
       rp:{ name:'Alma Sales Targets', id:location.hostname },
@@ -1471,7 +1471,7 @@ async function authenticateBiometric(name){
   const stored = getBiometricCred(name);
   if(!stored) return false;
   try{
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const challenge = window.crypto.getRandomValues(new Uint8Array(32));
     const rawId = Uint8Array.from(atob(stored.credId), c=>c.charCodeAt(0));
     const assertion = await navigator.credentials.get({publicKey:{
       challenge,
@@ -1484,16 +1484,22 @@ async function authenticateBiometric(name){
 }
 
 async function tryBiometricLogin(name){
-  const ok = await authenticateBiometric(name);
-  if(ok){
-    const isAdm = ADMIN_NAMES.includes(name);
-    currentUser=name; isAdmin=isAdm;
-    setCachedAuth(name,isAdm); saveUserWithExpiry(name);
-    document.getElementById('loginOverlay').classList.add('hidden');
-    fbLogAction('Signed in via biometric: '+name);
-    bootApp();
-  } else {
-    showToast('Biometric failed — enter PIN instead','warn');
+  try{
+    showToast('Touch your fingerprint sensor...','info');
+    const ok = await authenticateBiometric(name);
+    if(ok){
+      const isAdm = ADMIN_NAMES.includes(name);
+      currentUser=name; isAdmin=isAdm;
+      setCachedAuth(name,isAdm); saveUserWithExpiry(name);
+      document.getElementById('loginOverlay').classList.add('hidden');
+      fbLogAction('Signed in via biometric: '+name);
+      bootApp();
+    } else {
+      showToast('Not recognised — enter PIN instead','warn');
+    }
+  } catch(e){
+    console.log('Biometric login error:',e);
+    showToast('Fingerprint failed — enter PIN instead','warn');
   }
 }
 
@@ -1501,20 +1507,47 @@ async function offerBiometricSetup(){
   const available = await checkBiometricAvailable();
   if(!available) return;
   if(getBiometricCred(currentUser)) return; // already set up
-  // Show offer after a short delay
-  setTimeout(()=>{
-    showModal({
-      title:'Enable Fingerprint Login',
-      sub:'Skip the PIN next time',
-      fields:[],
-      confirmLabel:'Set Up Fingerprint',
-      onConfirm: async()=>{
-        const ok = await registerBiometric(currentUser);
-        if(ok) showToast('Fingerprint saved. Use it next time you log in.','ok');
-        else showToast('Fingerprint setup failed','warn');
-      }
-    });
-  }, 1500);
+  setTimeout(()=>showBiometricBanner(), 1500);
+}
+
+function showBiometricBanner(){
+  // Remove existing banner if any
+  const old = document.getElementById('biometricBanner');
+  if(old) old.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'biometricBanner';
+  banner.innerHTML = `
+    <div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:900;background:var(--purple);color:white;border-radius:16px;padding:14px 20px;box-shadow:0 8px 32px rgba(68,44,92,0.35);max-width:340px;width:90%;display:flex;align-items:center;gap:12px">
+      <span style="font-size:28px;flex-shrink:0">&#128400;</span>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:800;margin-bottom:2px">Enable Fingerprint Login</div>
+        <div style="font-size:10px;opacity:0.7">Skip the PIN on future visits</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <button onclick="setupBiometricNow()" style="background:var(--peach);color:var(--dark);border:none;border-radius:8px;padding:7px 12px;font-family:var(--font);font-size:10px;font-weight:800;cursor:pointer">Set Up</button>
+        <button onclick="document.getElementById('biometricBanner').remove()" style="background:rgba(255,255,255,0.15);color:white;border:none;border-radius:8px;padding:7px 12px;font-family:var(--font);font-size:10px;font-weight:700;cursor:pointer">Not Now</button>
+      </div>
+    </div>`;
+  document.body.appendChild(banner);
+  setTimeout(()=>{ const b=document.getElementById('biometricBanner'); if(b)b.remove(); }, 15000);
+}
+
+async function setupBiometricNow(){
+  const banner = document.getElementById('biometricBanner');
+  if(banner) banner.remove();
+  showToast('Touch your fingerprint sensor...','info');
+  try{
+    const ok = await registerBiometric(currentUser);
+    if(ok){
+      showToast('Fingerprint saved! Use it next time you log in.','ok');
+    } else {
+      showToast('Fingerprint setup failed — try again','warn');
+    }
+  } catch(e){
+    showToast('Fingerprint not available on this device','warn');
+    console.log('Biometric error:', e);
+  }
 }
 
 // ── ACTUALS / SALESFORCE CSV ──────────────────────────────────
